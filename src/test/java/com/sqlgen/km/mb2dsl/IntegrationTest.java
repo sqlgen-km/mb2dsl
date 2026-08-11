@@ -177,6 +177,41 @@ class IntegrationTest {
     }
 
     @Test
+    void testSelectKeyHandling() throws Exception {
+        Path resourcesDir = FIXTURES.resolve("src/main/resources");
+        List<Path> xmlFiles = MapperScanner.scanXmlMappers(resourcesDir);
+
+        // ProductMapper has <selectKey> for MySQL and Oracle
+        Path productXml = xmlFiles.stream()
+                .filter(p -> p.toString().contains("ProductMapper"))
+                .findFirst().orElseThrow();
+
+        List<StatementIR> stmts = XmlDirectParser.parse(productXml, "com.example.mapper.ProductMapper");
+        assertThat(stmts).hasSize(3);
+
+        // insertMysql: <selectKey order="AFTER"> → RETURNING id
+        StatementIR mysqlInsert = findStatement(stmts, "insertMysql");
+        assertThat(mysqlInsert).isNotNull();
+        assertThat(mysqlInsert.isHasReturning()).isTrue();
+        assertThat(mysqlInsert.getSql()).contains("RETURNING id");
+        assertThat(mysqlInsert.getSql()).doesNotContain("LAST_INSERT_ID");
+        assertThat(mysqlInsert.getSql()).doesNotContain("selectKey");
+
+        // insertOracle: <selectKey order="BEFORE"> → RETURNING id
+        StatementIR oracleInsert = findStatement(stmts, "insertOracle");
+        assertThat(oracleInsert).isNotNull();
+        assertThat(oracleInsert.isHasReturning()).isTrue();
+        assertThat(oracleInsert.getSql()).contains("RETURNING id");
+        assertThat(oracleInsert.getSql()).doesNotContain("NEXTVAL");
+        assertThat(oracleInsert.getSql()).doesNotContain("selectKey");
+
+        // insertPg: useGeneratedKeys → already has RETURNING-like behavior
+        StatementIR pgInsert = findStatement(stmts, "insertPg");
+        assertThat(pgInsert).isNotNull();
+        assertThat(pgInsert.isHasReturning()).isTrue();
+    }
+
+    @Test
     void testFullPipeline(@TempDir Path tempDir) throws Exception {
         Path resourcesDir = FIXTURES.resolve("src/main/resources");
         Path sourceDir = FIXTURES.resolve("src/main/java");

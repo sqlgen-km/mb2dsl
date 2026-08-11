@@ -120,15 +120,29 @@ public class XmlDirectParser {
             ir.setMapperInterfaceName(mapperInterfaceName);
             ir.setType(type);
 
-            // Raw SQL text
+            // Raw SQL text — strip <selectKey> elements before extracting text
+            NodeList selectKeyNodes = el.getElementsByTagName("selectKey");
+            Element selectKeyEl = null;
+            if (selectKeyNodes.getLength() > 0) {
+                selectKeyEl = (Element) selectKeyNodes.item(0);
+                ir.setHasReturning(true);
+                // Remove selectKey from DOM so getTextContent() won't include its text
+                el.removeChild(selectKeyEl);
+            }
+
             String sql = el.getTextContent().trim();
             // Expand <include> references
             sql = expandIncludes(sql, el, sqlFragments);
-            // Remove #{} → @param (simplified)
+            // Remove #{} → @param
             sql = convertPlaceholders(sql);
+
+            // Append RETURNING if selectKey was present
+            if (selectKeyEl != null) {
+                sql = appendReturning(sql, selectKeyEl);
+            }
             ir.setSql(sql);
 
-            // Detect RETURNING
+            // Detect RETURNING in SQL text
             if (sql.toUpperCase().contains("RETURNING")) {
                 ir.setHasReturning(true);
             }
@@ -257,6 +271,18 @@ public class XmlDirectParser {
             return ":exec";
         }
         return ":one";
+    }
+
+    /**
+     * Append RETURNING clause from <selectKey keyProperty="...">.
+     */
+    private static String appendReturning(String sql, Element selectKeyEl) {
+        String keyProp = selectKeyEl.getAttribute("keyProperty");
+        if (keyProp != null && !keyProp.isEmpty()
+                && !sql.toUpperCase().contains("RETURNING")) {
+            sql = sql.replaceAll(";?\\s*$", "") + " RETURNING " + keyProp;
+        }
+        return sql.replaceAll("\\s+", " ");
     }
 
     /** Simple field definition from resultMap. */

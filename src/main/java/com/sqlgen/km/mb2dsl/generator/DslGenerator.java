@@ -59,12 +59,13 @@ public class DslGenerator {
             sqlFiles.add(fileName);
             log.info("Generated: {}", fileName);
 
-            // Collect review items
+            // Collect review items + mapper detail
             for (StatementIR stmt : stmts) {
                 if (!stmt.getReviewTags().isEmpty()) {
                     report.addItem(fileName, stmt.getName(), stmt.getReviewTags(), stmt.getRawSql());
                 }
             }
+            report.addMapperDetail(mapperName, fileName, stmts.size());
         }
 
         // Generate sqlg.yaml
@@ -72,8 +73,12 @@ public class DslGenerator {
         Files.writeString(outputDir.resolve("sqlg.yaml"), yaml);
         log.info("Generated: sqlg.yaml");
 
-        // Write review report
-        report.writeTo(outputDir);
+        // Collect stats and write reports
+        int mapperCount = groups.size();
+        report.collectStats(statements, entities, 0, mapperCount);
+        report.setEntities(entities);
+        report.writeSummary(outputDir);
+        report.writeDetailedLog(outputDir, statements);
 
         return report;
     }

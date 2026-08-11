@@ -109,7 +109,11 @@ public class Main {
                 String key = mapperSimple + "." + stmt.getName();
                 String returnType = methodReturnTypes.get(key);
                 if (returnType != null) {
+                    String oldMode = stmt.getMode();
                     ModeResolver.refine(stmt, returnType);
+                    if (!oldMode.equals(stmt.getMode())) {
+                        stmt.addNote("mode refined: " + returnType + " → " + stmt.getMode());
+                    }
                     log.debug("Refined {} → {} (return type: {})", key, stmt.getMode(), returnType);
                 }
             }

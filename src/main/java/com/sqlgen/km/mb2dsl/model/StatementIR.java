@@ -17,6 +17,7 @@ public class StatementIR {
     private boolean hasReturning;           // INSERT RETURNING
     private List<String> keyColumns;        // RETURNING 列
     private List<String> reviewTags = new ArrayList<>();  // 人工审核标记
+    private List<String> notes = new ArrayList<>();        // 特殊处理备注 (selectKey→RETURNING等)
     private String resultMapId;             // XML resultMap 引用
     private String sourceFile;              // 原始来源文件 (Mapper.java 或 Mapper.xml)
     private String mapperInterfaceName;     // 所属 Mapper 接口全名
@@ -57,6 +58,9 @@ public class StatementIR {
 
     public List<String> getKeyColumns() { return keyColumns; }
     public void setKeyColumns(List<String> keyColumns) { this.keyColumns = keyColumns; }
+
+    public List<String> getNotes() { return notes; }
+    public void addNote(String note) { this.notes.add(note); }
 
     public List<String> getReviewTags() { return reviewTags; }
     public void addReviewTag(String tag) { this.reviewTags.add(tag); }

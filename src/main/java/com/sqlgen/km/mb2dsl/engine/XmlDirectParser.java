@@ -134,6 +134,8 @@ public class XmlDirectParser {
             if (skNodes.getLength() > 0) {
                 selectKeyEl = (Element) skNodes.item(0);
                 ir.setHasReturning(true);
+                String kp = selectKeyEl.getAttribute("keyProperty");
+                ir.addNote("selectKey → RETURNING " + (kp != null ? kp : "id"));
             }
 
             // Remove #{} → @param
@@ -152,6 +154,7 @@ public class XmlDirectParser {
             String ugk = el.getAttribute("useGeneratedKeys");
             if ("true".equals(ugk)) {
                 ir.setHasReturning(true);
+                ir.addNote("useGeneratedKeys");
             }
 
             // Parameter type

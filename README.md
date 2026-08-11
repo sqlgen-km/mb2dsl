@@ -53,27 +53,69 @@ RoleMapper        →  role.sql            -- package: roleMapper
 
 ## 动态 SQL 处理
 
-| 原始 | 转换 |
-|------|------|
-| `<if test="name != null"> AND name = #{name}</if>` | `AND (name = @name OR @name IS NULL)` |
-| `<foreach collection="ids" item="id" open="(" close=")">#{id}</foreach>` | `= ANY(@ids)` |
-| `<choose>/<when>` | 取第一个分支 |
-| `<where>` / `<set>` | 去掉标签，保留内容 |
-| `${column}` | 标注人工审核 |
-| `<foreach>` 批量 INSERT | 标注不支持 |
+XmlDirectParser 模式下，动态 SQL **标注 REVIEW 但不会自动改写**（输出 `_manual_review.md`）。需手动处理：
 
-## 不提供 `-c` 时的限制
+| 原始 | 处理 |
+|------|------|
+| `<if test="name != null"> AND name = #{name}</if>` | 标注 REVIEW，建议改为 `AND (name = @name OR @name IS NULL)` |
+| `<foreach collection="ids" item="id" open="(" close=")">#{id}</foreach>` | 标注 REVIEW，建议改为 `= ANY(@ids::int64[])` |
+| `<choose>/<when>/<otherwise>` | 标注 REVIEW，取第一个 `<when>` 分支 |
+| `<where>` / `<set>` | 去掉外层标签，保留内部 SQL |
+| `<include refid="BaseColumns"/>` | 直接展开（仅单层，不支持嵌套引用） |
+| `<foreach>` 批量 INSERT | **不支持**，标注 REVIEW |
+| `${column}` 动态列名/表名 | **不支持**，标注 REVIEW |
+| `${@Enum@VALUE.getCode()}` | **不支持**，标注 REVIEW |
+| `<bind>` / `<trim>` | **不支持**，标注 REVIEW |
+
+## 限制与已知问题
+
+### 解析范围
+
+| 支持 | 不支持 |
+|------|--------|
+| MyBatis XML Mapper (`<select>/<insert>/<update>/<delete>`) | 纯注解 Mapper（`@Select/@Insert`，需 `--classpath`） |
+| `#{}` 占位符 → `@param` | `${}` 动态占位符 |
+| `<include>` 单层展开 | `<include>` 嵌套引用 |
+| `resultType` 基本类型/实体类名 | `resultType="map"` → 输出 `model: map` 无效 |
+| `useGeneratedKeys="true"` → `INSERT RETURNING` | `<selectKey>` 多数据库 RETURNING 策略 |
+| `<resultMap>` 结构解析（内部使用） | `<resultMap>` → `-- model:` 块生成（需后续手动补充） |
+| `parameterType` 识别 | 参数类型映射到 DSL 类型 |
+| 单条 SQL 语句 | 存储过程 (`statementType="CALLABLE"`) |
+
+### model 定义
+
+- **无 `--classpath` 时**：不生成 `-- model:` 块。Entity 类不在 classpath 上，需手动从 `<resultMap>` 或 Entity 源码补充。
+- **提供 `--classpath` 时**：通过 MyBatis Configuration API 可获取 resultMap 完整映射，但需 Entity 类在 classpath。
+
+### SQL 格式
+
+- `<include>` 展开后相邻片段可能缺少空格（如 `WHERE dict_type=@dictTypeAND status=@status`），需手动修正。
+- XML 中的换行和缩进会保留在生成的 SQL 中。
+
+### 类型与模式
+
+| 场景 | 效果 |
+|------|------|
+| `List<Entity>` 返回 | 自动检测 `:many` |
+| `void` 返回 | 自动检测 `:exec` |
+| `int/long` 返回 (非 SELECT) | 自动检测 `:execrows` |
+| `int/long` 返回 (SELECT) | 自动检测 `:one` |
+| `INSERT + useGeneratedKeys` | 自动检测 `INSERT RETURNING` |
+| `Collection<?>` 参数 | 不展开泛型，标记为 `@ids` |
+
+## 不提供 `-c` 时
 
 - 直接从 XML 提取 SQL，**不依赖 Entity 类**，不需要目标项目编译
-- `<include>` 引用可直接展开
-- `<resultMap>` 中的字段映射暂不提取（需后续手动补充 `-- model:` 定义）
-- 复杂表达式（如 `${@Enum@VALUE}`）标注 REVIEW
+- `<include>` 单层展开
+- `<resultMap>` 字段不自动生成 `-- model:` 块
+- 动态 SQL 标注 REVIEW，不自动改写
 
 ## 提供 `-c target/classes` 时
 
-- 通过 MyBatis Configuration API 完整解析 XML + 注解 Mapper
+- 通过 MyBatis Configuration API 解析 XML + 注解 Mapper
 - `<resultMap>` 字段映射更准确
-- 需要 Entity 类在 classpath 上（编译目标项目）
+- 需要 Entity 类在 classpath 上（完整编译目标项目）
+- 目标项目与 mb2dsl 需使用相同 JDK 版本编译
 
 ## 输出文件
 

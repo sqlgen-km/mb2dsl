@@ -16,10 +16,11 @@ java -jar mb2dsl.jar \
 
 # 输出
 # sqlgen-dsl/
-#   ├── user.sql            (UserMapper → user, package=userMapper)
-#   ├── aims_config.sql     (AimsConfigMapper → aims_config, package=aimsConfigMapper)
-#   ├── sqlg.yaml
-#   └── _manual_review.md   (需人工处理的项)
+#   ├── user.sql              (DSL 文件)
+#   ├── sqlg.yaml             (sqlgen 配置)
+#   ├── _parsing_report.md    (解析统计汇报)
+#   ├── _parsing_log.md       (逐语句详细日志)
+#   └── _manual_review.md     (需人工处理的项)
 ```
 
 ## 命令参数
@@ -100,6 +101,17 @@ RoleMapper        →  role.sql            -- package: roleMapper
 | `int/long` 返回 (SELECT) | 自动检测 `:one` |
 | `INSERT + useGeneratedKeys/selectKey` | 自动检测 `INSERT RETURNING` |
 | `Collection<?>` 参数 | 不展开泛型，标记为 `@collection` |
+| 方法参数无 `@Param` 注解 | 取 Java 参数名（可能因编译优化不准确） |
+| SELECT * | 不展开列名（需有 Entity 类或 resultMap 才知道列） |
+
+### 动态 SQL 改写限制
+
+| 场景 | 效果 |
+|------|------|
+| `<if test="name != null">` | ✅ 改写为 `OR @name IS NULL` |
+| `<if test="name != null and name != ''">` | ⚠️ 只匹配 `!= null`，空字符串检查丢失 |
+| `<if test="name != null && status == 1">` | ⚠️ 复杂表达式降级为保留 body |
+| `<if test="list.size() > 0">` | ⚠️ 方法调用不识别，保留 body |
 
 ## 不提供 `-c` 时
 

@@ -28,12 +28,18 @@ public class FileGrouper {
 
     /**
      * Find the entity(ies) referenced by statements in a group.
+     * Matches by resultMap type or resultType.
      */
-    public static List<EntityIR> entitiesForGroup(List<StatementIR> stmts, List<EntityIR> allEntities) {
+    public static List<EntityIR> entitiesForGroup(List<StatementIR> stmts, List<EntityIR> allEntities,
+                                                    Map<String, String> resultMapTypes) {
         Set<String> entityNames = new LinkedHashSet<>();
         for (StatementIR stmt : stmts) {
             if (stmt.getReturnEntity() != null) {
                 entityNames.add(stmt.getReturnEntity());
+            }
+            // Also check resultMap reference
+            if (stmt.getResultMapId() != null && resultMapTypes.containsKey(stmt.getResultMapId())) {
+                entityNames.add(resultMapTypes.get(stmt.getResultMapId()));
             }
         }
 

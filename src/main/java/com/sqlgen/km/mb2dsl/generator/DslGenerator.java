@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -39,6 +40,9 @@ public class DslGenerator {
         Files.createDirectories(outputDir);
         ReviewReport report = new ReviewReport();
 
+        // Build resultMap → entity class name mapping
+        Map<String, String> resultMapTypes = buildResultMapTypeMap(entities, statements);
+
         // Group statements by mapper interface
         Map<String, List<StatementIR>> groups = FileGrouper.byMapperInterface(statements);
 
@@ -47,7 +51,7 @@ public class DslGenerator {
             List<StatementIR> stmts = entry.getValue();
 
             // Find referenced entities
-            List<EntityIR> groupEntities = FileGrouper.entitiesForGroup(stmts, entities);
+            List<EntityIR> groupEntities = FileGrouper.entitiesForGroup(stmts, entities, resultMapTypes);
 
             // Build DSL content
             String dsl = buildDslFileContent(mapperName, groupEntities, stmts);
@@ -103,5 +107,25 @@ public class DslGenerator {
         }
 
         return sb.toString();
+    }
+
+    /**
+     * Build a mapping from resultMap id → entity class name.
+     * E.g., "RoleResultMap" → "Role"
+     */
+    private static Map<String, String> buildResultMapTypeMap(List<EntityIR> entities,
+                                                              List<StatementIR> statements) {
+        Map<String, String> map = new LinkedHashMap<>();
+        // For each entity, match against statement resultMap ids by name convention
+        for (EntityIR entity : entities) {
+            String cn = entity.getClassName().toLowerCase();
+            for (StatementIR stmt : statements) {
+                String rmId = stmt.getResultMapId();
+                if (rmId != null && rmId.toLowerCase().contains(cn)) {
+                    map.put(rmId, entity.getClassName());
+                }
+            }
+        }
+        return map;
     }
 }

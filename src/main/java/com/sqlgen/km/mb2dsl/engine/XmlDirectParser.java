@@ -79,6 +79,7 @@ public class XmlDirectParser {
         for (int i = 0; i < rmNodes.getLength(); i++) {
             Element rm = (Element) rmNodes.item(i);
             String id = rm.getAttribute("id");
+            String type = rm.getAttribute("type");
             List<FieldDef> fields = new ArrayList<>();
 
             NodeList children = rm.getChildNodes();
@@ -160,8 +161,7 @@ public class XmlDirectParser {
             // Parameter type
             String paramType = el.getAttribute("parameterType");
             if (paramType != null && !paramType.isEmpty()) {
-                // Extract simple param from SQL placeholders
-                extractSimpleParams(ir, sql);
+                ir.addNote("parameterType: " + lastSegment(paramType));
             }
 
             // Result type
@@ -172,7 +172,11 @@ public class XmlDirectParser {
                 // Type comes from resultMap — not easily extractable without classes
             }
             if (resultType != null && !resultType.isEmpty()) {
-                if (isScalarTypeName(resultType)) {
+                // Skip "map" resultType — no model in DSL
+                if ("map".equalsIgnoreCase(resultType) || "hashmap".equalsIgnoreCase(resultType)) {
+                    ir.setReturnEntity(null);
+                    ir.setReturnDslType(null);
+                } else if (isScalarTypeName(resultType)) {
                     ir.setReturnEntity(null);
                     ir.setReturnDslType(mapScalarType(resultType));
                 } else {
@@ -291,7 +295,8 @@ public class XmlDirectParser {
     }
 
     /**
-     * Build SQL text from DOM child nodes, skipping <selectKey>.
+     * Build SQL text from DOM child nodes.
+     * Skips <selectKey>, expands <include>, rewrites dynamic SQL.
      */
     private static String buildSqlFromChildren(Element el, Map<String, String> sqlFragments) {
         NodeList children = el.getChildNodes();
@@ -304,10 +309,7 @@ public class XmlDirectParser {
                 break;
             }
         }
-        if (!hasElements) {
-            // Pure text — use getTextContent() directly
-            return null;
-        }
+        if (!hasElements) return null;
 
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < children.getLength(); i++) {
@@ -317,20 +319,76 @@ public class XmlDirectParser {
             } else if (child.getNodeType() == Node.ELEMENT_NODE) {
                 Element childEl = (Element) child;
                 String tag = childEl.getTagName();
-                if ("selectKey".equals(tag)) {
-                    // Skip — RETURNING appended separately
-                } else if ("include".equals(tag)) {
-                    String refid = childEl.getAttribute("refid");
-                    if (refid != null && sqlFragments.containsKey(refid)) {
-                        sb.append(sqlFragments.get(refid));
+                switch (tag) {
+                    case "selectKey" -> {} // skip, RETURNING appended separately
+                    case "include" -> {
+                        String refid = childEl.getAttribute("refid");
+                        if (refid != null && sqlFragments.containsKey(refid)) {
+                            sb.append(" ").append(sqlFragments.get(refid)).append(" ");
+                        }
                     }
-                } else {
-                    // <if>, <where>, <foreach>, etc. — extract text
-                    sb.append(childEl.getTextContent());
+                    case "if" -> rewriteIfNode(childEl, sb);
+                    case "foreach" -> rewriteForEachNode(childEl, sb);
+                    case "where", "set", "trim", "bind" ->
+                        sb.append(childEl.getTextContent()); // strip tag, keep body
+                    case "choose" -> rewriteChooseNode(childEl, sb);
+                    default -> sb.append(childEl.getTextContent());
                 }
             }
         }
-        return sb.toString().trim();
+        // Clean whitespace: collapse multiple spaces/newlines, trim
+        return sb.toString().replaceAll("\\s+", " ").trim();
+    }
+
+    /** Rewrite <if test="param != null">body</if> → AND (body OR @param IS NULL) */
+    private static void rewriteIfNode(Element ifEl, StringBuilder sb) {
+        String test = ifEl.getAttribute("test");
+        String body = ifEl.getTextContent().replaceAll("\\s+", " ").trim();
+        // Extract param name from test expression
+        String param = null;
+        if (test != null) {
+            java.util.regex.Matcher m = java.util.regex.Pattern
+                    .compile("(\\w+)\\s*!=\\s*null").matcher(test);
+            if (m.find()) param = m.group(1);
+        }
+        if (param != null) {
+            body = body.replaceAll("^(?i)\\s*(AND|OR)\\s+", "").trim();
+            sb.append(" AND (").append(body).append(" OR @").append(param).append(" IS NULL)");
+        } else {
+            sb.append(" ").append(body);
+        }
+    }
+
+    /** Rewrite <foreach> IN clause → = ANY(@ids) */
+    private static void rewriteForEachNode(Element forEach, StringBuilder sb) {
+        String collection = forEach.getAttribute("collection");
+        String open = forEach.getAttribute("open");
+        String close = forEach.getAttribute("close");
+        String body = forEach.getTextContent();
+
+        if (body != null && body.toUpperCase().contains("INSERT")) {
+            sb.append(" /* <foreach> batch INSERT — manual rewrite needed */ ");
+        } else if ("(".equals(open) && ")".equals(close)) {
+            sb.append(" = ANY(@").append(collection != null ? collection : "ids").append(")");
+        } else {
+            sb.append(" /* @").append(collection != null ? collection : "ids").append(" */ ");
+        }
+    }
+
+    /** Rewrite <choose> → take first <when>, fallback to <otherwise> */
+    private static void rewriteChooseNode(Element choose, StringBuilder sb) {
+        NodeList whens = choose.getElementsByTagName("when");
+        if (whens.getLength() > 0) {
+            Element first = (Element) whens.item(0);
+            String body = first.getTextContent().replaceAll("\\s+", " ").trim();
+            sb.append(" ").append(body);
+        } else {
+            NodeList other = choose.getElementsByTagName("otherwise");
+            if (other.getLength() > 0) {
+                sb.append(" ").append(other.item(0).getTextContent().replaceAll("\\s+", " ").trim());
+            }
+        }
+        sb.append(" /* <choose> — first branch taken */ ");
     }
 
     /** Simple field definition from resultMap. */
@@ -339,4 +397,68 @@ public class XmlDirectParser {
         public String property;
         public String javaType;
     }
+
+    /**
+     * Extract entity definitions from <resultMap> elements in XML files.
+     */
+    public static List<com.sqlgen.km.mb2dsl.model.EntityIR> parseResultMapEntities(List<Path> xmlFiles) {
+        Map<String, com.sqlgen.km.mb2dsl.model.EntityIR> entityMap = new LinkedHashMap<>();
+        for (Path xmlFile : xmlFiles) {
+            try (InputStream is = Files.newInputStream(xmlFile)) {
+                Document doc = DocumentBuilderFactory.newInstance()
+                        .newDocumentBuilder().parse(is);
+                doc.getDocumentElement().normalize();
+
+                NodeList rmNodes = doc.getElementsByTagName("resultMap");
+                for (int i = 0; i < rmNodes.getLength(); i++) {
+                    Element rm = (Element) rmNodes.item(i);
+                    String type = rm.getAttribute("type");
+                    if (type == null || type.isEmpty()) continue;
+
+                    String className = type.substring(type.lastIndexOf('.') + 1);
+                    com.sqlgen.km.mb2dsl.model.EntityIR entity = entityMap
+                            .computeIfAbsent(className, k -> new com.sqlgen.km.mb2dsl.model.EntityIR());
+                    entity.setClassName(className);
+                    // Use first resultMap's table as reference
+                    if (entity.getTableName() == null) {
+                        entity.setTableName(com.sqlgen.km.mb2dsl.transform.TypeMapper.camelToSnake(className));
+                    }
+
+                    NodeList children = rm.getChildNodes();
+                    for (int j = 0; j < children.getLength(); j++) {
+                        Node child = children.item(j);
+                        if (child.getNodeType() != Node.ELEMENT_NODE) continue;
+                        Element el = (Element) child;
+                        String tag = el.getTagName();
+                        if ("id".equals(tag) || "result".equals(tag)) {
+                            String col = el.getAttribute("column");
+                            String prop = el.getAttribute("property");
+                            String jt = el.hasAttribute("javaType") ? el.getAttribute("javaType") : null;
+
+                            // Skip if already present
+                            if (entity.getFields().stream().anyMatch(f -> f.getColumnName().equals(col))) {
+                                continue;
+                            }
+
+                            com.sqlgen.km.mb2dsl.model.FieldIR f = new com.sqlgen.km.mb2dsl.model.FieldIR();
+                            f.setName(prop);
+                            f.setColumnName(col);
+                            f.setJavaType(jt != null ? jt : "String");
+                            f.setDslType(com.sqlgen.km.mb2dsl.transform.TypeMapper.toDslType(
+                                    jt != null ? jt : "String"));
+                            f.setPrimaryKey("id".equals(tag));
+                            f.setNullable(false);
+                            entity.addField(f);
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.debug("Failed to extract resultMaps from {}: {}", xmlFile.getFileName(), e.getMessage());
+            }
+        }
+        return new ArrayList<>(entityMap.values());
+    }
+
+    // Type field added to FieldDef for external use
+    public String type;
 }

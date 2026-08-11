@@ -51,10 +51,28 @@ public class Main {
         List<Path> xmlMapperFiles = MapperScanner.scanXmlMappers(opts.getResourcesDir());
         List<Path> mapperJavaFiles = MapperScanner.scanMapperJavaFiles(opts.getSrcDir());
 
-        // ---- Step 2: Parse entities using JavaParser ----
-        List<EntityIR> entities;
+        // ---- Step 2: Parse entities from Java source + XML resultMaps ----
         List<Path> entityFiles = EntityScanner.scanEntityFiles(opts.getSrcDir(), List.of());
-        entities = EntityScanner.parseAll(entityFiles);
+        List<EntityIR> entities = EntityScanner.parseAll(entityFiles);
+        // Also extract entities from XML <resultMap> definitions
+        List<EntityIR> xmlEntities = XmlDirectParser.parseResultMapEntities(xmlMapperFiles);
+        // Merge: XML resultMap entities take precedence
+        Map<String, EntityIR> merged = new LinkedHashMap<>();
+        for (EntityIR e : entities) merged.put(e.getClassName(), e);
+        for (EntityIR e : xmlEntities) {
+            // XML resultMap adds fields that Java source might miss
+            EntityIR existing = merged.get(e.getClassName());
+            if (existing != null) {
+                for (com.sqlgen.km.mb2dsl.model.FieldIR f : e.getFields()) {
+                    if (existing.getFields().stream().noneMatch(ef -> ef.getColumnName().equals(f.getColumnName()))) {
+                        existing.addField(f);
+                    }
+                }
+            } else {
+                merged.put(e.getClassName(), e);
+            }
+        }
+        entities = new ArrayList<>(merged.values());
 
         // ---- Step 3: Parse mapper interfaces for mode refinement (JavaParser, no classpath needed) ----
         Map<String, String> methodReturnTypes = MapperInterfaceParser.parseMethodReturnTypes(mapperJavaFiles);

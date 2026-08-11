@@ -12,7 +12,7 @@ import java.nio.file.Path;
 @Command(
         name = "mb2dsl",
         mixinStandardHelpOptions = true,
-        version = "mb2dsl 1.0.0",
+        version = "mb2dsl 1.0.1-SNAPSHOT",
         description = "MyBatis → sqlgen DSL reverse engineering tool"
 )
 public class CliOptions implements Runnable {

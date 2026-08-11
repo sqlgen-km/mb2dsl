@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.1.0 (2026-08-11)
+
+### 新增
+
+- **Maven 插件**：`mb2dsl-maven-plugin`，通过 `generate-dsl` goal 集成到 Maven 构建
+- 项目重构为多模块：`mb2dsl-parent` + `mb2dsl-core` + `mb2dsl-maven-plugin`
+
+### 改进
+
+- `<include>` 嵌套引用支持（递归解析 `sqlFragments`）
+- 动态 SQL `<if>` 改写降级说明（空字符串检查/复杂表达式）
+- README 补充 Maven 使用方式和不支持项
+
 ## v1.0.0 (2026-08-11)
 
 ### 核心功能

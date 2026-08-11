@@ -143,6 +143,40 @@ class IntegrationTest {
     }
 
     @Test
+    void testAnnotationStatementParsing() throws Exception {
+        Path sourceDir = FIXTURES.resolve("src/main/java");
+        List<Path> mapperFiles = MapperScanner.scanMapperJavaFiles(sourceDir);
+
+        List<StatementIR> stmts = MapperInterfaceParser.parseAnnotationStatements(mapperFiles);
+        assertThat(stmts).isNotEmpty();
+
+        // AnnotationOnlyMapper.selectById
+        StatementIR selectById = findStatement(stmts, "selectById");
+        assertThat(selectById).isNotNull();
+        assertThat(selectById.getType()).isEqualTo(StatementIR.StatementType.SELECT);
+        assertThat(selectById.getSql()).contains("@id");
+        assertThat(selectById.getSql()).doesNotContain("#{");
+        assertThat(selectById.getMode()).isEqualTo(":one");
+
+        // AnnotationOnlyMapper.insert (useGeneratedKeys → RETURNING)
+        StatementIR insert = findStatement(stmts, "insert");
+        assertThat(insert).isNotNull();
+        assertThat(insert.getType()).isEqualTo(StatementIR.StatementType.INSERT);
+        assertThat(insert.isHasReturning()).isTrue();
+        assertThat(insert.getMode()).isEqualTo(":one");
+
+        // AnnotationOnlyMapper.deleteById → :exec
+        StatementIR deleteById = findStatement(stmts, "deleteById");
+        assertThat(deleteById).isNotNull();
+        assertThat(deleteById.getMode()).isEqualTo(":exec");
+
+        // AnnotationOnlyMapper.updateGender → :execrows
+        StatementIR updateGender = findStatement(stmts, "updateGender");
+        assertThat(updateGender).isNotNull();
+        assertThat(updateGender.getMode()).isEqualTo(":execrows");
+    }
+
+    @Test
     void testFullPipeline(@TempDir Path tempDir) throws Exception {
         Path resourcesDir = FIXTURES.resolve("src/main/resources");
         Path sourceDir = FIXTURES.resolve("src/main/java");

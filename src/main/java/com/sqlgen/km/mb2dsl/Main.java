@@ -81,11 +81,22 @@ public class Main {
             Introspector introspector = new Introspector();
             statements = introspector.extractStatements(config);
         } else {
-            // No classpath: use direct XML parsing (no entity classes needed)
+            // No classpath: use direct XML parsing + annotation parsing
             for (Path xml : xmlMapperFiles) {
                 String mapperName = extractMapperNameFromXml(xml);
                 List<StatementIR> stmts = XmlDirectParser.parse(xml, mapperName);
                 statements.addAll(stmts);
+            }
+
+            // Also parse annotation-based SQL from Mapper interfaces
+            List<StatementIR> annotationStmts = MapperInterfaceParser.parseAnnotationStatements(mapperJavaFiles);
+            // Merge: skip annotation statements that already have an XML counterpart
+            Set<String> xmlIds = new HashSet<>();
+            for (StatementIR s : statements) xmlIds.add(s.getName());
+            for (StatementIR as : annotationStmts) {
+                if (!xmlIds.contains(as.getName())) {
+                    statements.add(as);
+                }
             }
             log.info("Parsed {} statements from XML (direct mode, no entity classes)", statements.size());
         }

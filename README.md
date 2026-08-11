@@ -73,7 +73,8 @@ XmlDirectParser 模式下，动态 SQL **标注 REVIEW 但不会自动改写**�
 
 | 支持 | 不支持 |
 |------|--------|
-| MyBatis XML Mapper (`<select>/<insert>/<update>/<delete>`) | 纯注解 Mapper（`@Select/@Insert`，需 `--classpath`） |
+| MyBatis XML Mapper (`<select>/<insert>/<update>/<delete>`) | — |
+| 纯注解 Mapper (`@Select/@Insert/@Update/@Delete`) | 复杂动态注解（`@SelectProvider` 等） |
 | `#{}` 占位符 → `@param` | `${}` 动态占位符 |
 | `<include>` 单层展开 | `<include>` 嵌套引用 |
 | `resultType` 基本类型/实体类名 | `resultType="map"` → 输出 `model: map` 无效 |
@@ -105,10 +106,11 @@ XmlDirectParser 模式下，动态 SQL **标注 REVIEW 但不会自动改写**�
 
 ## 不提供 `-c` 时
 
-- 直接从 XML 提取 SQL，**不依赖 Entity 类**，不需要目标项目编译
+- 直接从 XML + Mapper 注解提取 SQL，**不依赖 Entity 类**，不需要目标项目编译
 - `<include>` 单层展开
 - `<resultMap>` 字段不自动生成 `-- model:` 块
 - 动态 SQL 标注 REVIEW，不自动改写
+- 纯注解 Mapper（`@Select/@Insert` 等）通过 JavaParser 源码解析
 
 ## 提供 `-c target/classes` 时
 

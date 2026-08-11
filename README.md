@@ -1,6 +1,6 @@
 # mb2dsl
 
-MyBatis → sqlgen DSL 逆向工程工具。
+MyBatis → [sqlgen](https://github.com/sqlgen-km/sqlgen) DSL 逆向工程工具。
 
 扫描已有 Java 项目的 MyBatis XML Mapper + Mapper 接口 + Entity 类，生成 sqlgen 可用的 `.sql` DSL 文件和 `sqlg.yaml` 配置。
 

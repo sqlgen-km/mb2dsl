@@ -64,10 +64,60 @@ public class XmlDirectParser {
         for (int i = 0; i < sqlNodes.getLength(); i++) {
             Element sqlEl = (Element) sqlNodes.item(i);
             String id = sqlEl.getAttribute("id");
-            String text = sqlEl.getTextContent().trim();
-            fragments.put(id, text);
+            // Walk child nodes to preserve <include> tags as text
+            String text = buildInnerText(sqlEl);
+            fragments.put(id, text.trim());
+        }
+        // Resolve nested <include> references (max 10 levels)
+        for (int level = 0; level < 10; level++) {
+            boolean changed = false;
+            for (Map.Entry<String, String> entry : fragments.entrySet()) {
+                String resolved = resolveNestedIncludes(entry.getValue(), fragments);
+                if (!resolved.equals(entry.getValue())) {
+                    entry.setValue(resolved);
+                    changed = true;
+                }
+            }
+            if (!changed) break;
         }
         return fragments;
+    }
+
+    /** Build inner text preserving child element tags as text. */
+    private static String buildInnerText(Element el) {
+        StringBuilder sb = new StringBuilder();
+        NodeList children = el.getChildNodes();
+        for (int i = 0; i < children.getLength(); i++) {
+            Node child = children.item(i);
+            if (child.getNodeType() == Node.TEXT_NODE) {
+                sb.append(child.getTextContent());
+            } else if (child.getNodeType() == Node.ELEMENT_NODE) {
+                Element childEl = (Element) child;
+                sb.append("<").append(childEl.getTagName());
+                // Append attributes
+                NamedNodeMap attrs = childEl.getAttributes();
+                for (int j = 0; j < attrs.getLength(); j++) {
+                    Attr attr = (Attr) attrs.item(j);
+                    sb.append(" ").append(attr.getName()).append("=\"").append(attr.getValue()).append("\"");
+                }
+                sb.append("/>");
+            }
+        }
+        return sb.toString();
+    }
+
+    private static String resolveNestedIncludes(String text, Map<String, String> fragments) {
+        java.util.regex.Matcher m = java.util.regex.Pattern
+                .compile("<include\\s+refid\\s*=\\s*\"([^\"]+)\"\\s*/?>")
+                .matcher(text);
+        StringBuffer sb = new StringBuffer();
+        while (m.find()) {
+            String refid = m.group(1);
+            String replacement = fragments.getOrDefault(refid, m.group(0));
+            m.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(replacement));
+        }
+        m.appendTail(sb);
+        return sb.toString();
     }
 
     /**

@@ -77,7 +77,7 @@ RoleMapper        →  role.sql            -- package: roleMapper
 | MyBatis XML Mapper (`<select>/<insert>/<update>/<delete>`) | — |
 | 纯注解 Mapper (`@Select/@Insert/@Update/@Delete`) | `@SelectProvider/@InsertProvider` |
 | `#{}` 占位符 → `@param` | `${}` 动态占位符 |
-| `<include>` 单层展开（自动补空格） | `<include>` 嵌套引用 |
+| `<include>` 展开（含嵌套引用，自动补空格） | — |
 | `resultType` 基本类型/实体类名 | `resultType="map"` → 自动跳过 model |
 | `useGeneratedKeys="true"` → `INSERT RETURNING` | — |
 | `<selectKey>` → `INSERT RETURNING` | — |

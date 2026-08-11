@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.mapper.UserMapper">
+
+    <resultMap id="userResultMap" type="com.example.entity.User">
+        <id column="id" property="id" javaType="Long"/>
+        <result column="display_name" property="displayName" javaType="String"/>
+        <result column="gender" property="gender" javaType="String"/>
+        <result column="avatar" property="avatar" javaType="String"/>
+        <result column="created_at" property="createdAt" javaType="java.time.LocalDateTime"/>
+    </resultMap>
+
+    <select id="findById" resultMap="userResultMap">
+        SELECT id, display_name, gender, avatar, created_at
+        FROM users
+        WHERE id = #{id}
+    </select>
+
+    <select id="findByGender" resultMap="userResultMap">
+        SELECT id, display_name, gender, avatar, created_at
+        FROM users
+        WHERE gender = #{gender} AND deleted_at IS NULL
+        ORDER BY id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <insert id="insertUser" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        INSERT INTO users (display_name, gender, avatar, created_at)
+        VALUES (#{displayName}, #{gender}, #{avatar}, NOW())
+    </insert>
+
+    <delete id="deleteUser">
+        DELETE FROM users WHERE id = #{id}
+    </delete>
+</mapper>

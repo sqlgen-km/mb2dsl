@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.mapper.ItemMapper">
+
+    <resultMap id="itemResultMap" type="com.example.entity.Item">
+        <id column="id" property="id" javaType="Long"/>
+        <result column="name" property="name" javaType="String"/>
+        <result column="price" property="price" javaType="Double"/>
+        <result column="stock" property="stock" javaType="Integer"/>
+    </resultMap>
+
+    <select id="findAll" resultMap="itemResultMap">
+        SELECT id, name, price, stock FROM items ORDER BY id
+    </select>
+
+    <select id="countItems" resultType="long">
+        SELECT COUNT(*) FROM items
+    </select>
+</mapper>

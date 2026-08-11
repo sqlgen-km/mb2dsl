@@ -4,23 +4,46 @@ MyBatis → sqlgen DSL 逆向工程工具。
 
 扫描已有 Java 项目的 MyBatis XML Mapper + Mapper 接口 + Entity 类，生成 sqlgen 可用的 `.sql` DSL 文件和 `sqlg.yaml` 配置。
 
-## 快速开始
+## 使用方式
+
+### 命令行（独立 jar）
 
 ```bash
-# 无需编译目标项目，直接运行
 java -jar mb2dsl.jar \
   -s src/main/java \
   -r src/main/resources \
   -o ./sqlgen-dsl \
   -p com.example
+```
 
-# 输出
-# sqlgen-dsl/
-#   ├── user.sql              (DSL 文件)
-#   ├── sqlg.yaml             (sqlgen 配置)
-#   ├── _parsing_report.md    (解析统计汇报)
-#   ├── _parsing_log.md       (逐语句详细日志)
-#   └── _manual_review.md     (需人工处理的项)
+### Maven 插件
+
+```xml
+<plugin>
+    <groupId>com.sqlgen.km</groupId>
+    <artifactId>mb2dsl-maven-plugin</artifactId>
+    <version>1.0.0</version>
+    <configuration>
+        <basePackage>com.example</basePackage>
+        <!-- 可选，以下为默认值 -->
+        <!-- <srcDir>${project.basedir}/src/main/java</srcDir> -->
+        <!-- <resourcesDir>${project.basedir}/src/main/resources</resourcesDir> -->
+        <!-- <outputDir>${project.basedir}/sqlgen-dsl</outputDir> -->
+        <!-- <engines>pg</engines> -->
+    </configuration>
+</plugin>
+```
+
+```bash
+mvn com.sqlgen.km:mb2dsl-maven-plugin:1.0.0:generate-dsl
+```
+
+或通过命令行覆盖参数：
+
+```bash
+mvn com.sqlgen.km:mb2dsl-maven-plugin:1.0.0:generate-dsl \
+  -Dmb2dsl.basePackage=com.example.hospital \
+  -Dmb2dsl.outputDir=./output
 ```
 
 ## 命令参数

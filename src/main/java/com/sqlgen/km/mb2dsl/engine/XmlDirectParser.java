@@ -120,22 +120,24 @@ public class XmlDirectParser {
             ir.setMapperInterfaceName(mapperInterfaceName);
             ir.setType(type);
 
-            // Raw SQL text — strip <selectKey> elements before extracting text
-            NodeList selectKeyNodes = el.getElementsByTagName("selectKey");
+            // Build SQL by walking DOM child nodes
+            // Skip <selectKey> elements; expand <include> references
             Element selectKeyEl = null;
-            if (selectKeyNodes.getLength() > 0) {
-                selectKeyEl = (Element) selectKeyNodes.item(0);
-                ir.setHasReturning(true);
-                // Remove selectKey from DOM so getTextContent() won't include its text
-                el.removeChild(selectKeyEl);
+            String sql = buildSqlFromChildren(el, sqlFragments);
+            if (sql == null) {
+                // Fallback: plain text content
+                sql = el.getTextContent().trim();
             }
 
-            String sql = el.getTextContent().trim();
-            // Expand <include> references
-            sql = expandIncludes(sql, el, sqlFragments);
+            // Check if we skipped a <selectKey>
+            NodeList skNodes = el.getElementsByTagName("selectKey");
+            if (skNodes.getLength() > 0) {
+                selectKeyEl = (Element) skNodes.item(0);
+                ir.setHasReturning(true);
+            }
+
             // Remove #{} → @param
             sql = convertPlaceholders(sql);
-
             // Append RETURNING if selectKey was present
             if (selectKeyEl != null) {
                 sql = appendReturning(sql, selectKeyEl);
@@ -283,6 +285,49 @@ public class XmlDirectParser {
             sql = sql.replaceAll(";?\\s*$", "") + " RETURNING " + keyProp;
         }
         return sql.replaceAll("\\s+", " ");
+    }
+
+    /**
+     * Build SQL text from DOM child nodes, skipping <selectKey>.
+     */
+    private static String buildSqlFromChildren(Element el, Map<String, String> sqlFragments) {
+        NodeList children = el.getChildNodes();
+        if (children.getLength() == 0) return null;
+
+        boolean hasElements = false;
+        for (int i = 0; i < children.getLength(); i++) {
+            if (children.item(i).getNodeType() == Node.ELEMENT_NODE) {
+                hasElements = true;
+                break;
+            }
+        }
+        if (!hasElements) {
+            // Pure text — use getTextContent() directly
+            return null;
+        }
+
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < children.getLength(); i++) {
+            Node child = children.item(i);
+            if (child.getNodeType() == Node.TEXT_NODE) {
+                sb.append(child.getTextContent());
+            } else if (child.getNodeType() == Node.ELEMENT_NODE) {
+                Element childEl = (Element) child;
+                String tag = childEl.getTagName();
+                if ("selectKey".equals(tag)) {
+                    // Skip — RETURNING appended separately
+                } else if ("include".equals(tag)) {
+                    String refid = childEl.getAttribute("refid");
+                    if (refid != null && sqlFragments.containsKey(refid)) {
+                        sb.append(sqlFragments.get(refid));
+                    }
+                } else {
+                    // <if>, <where>, <foreach>, etc. — extract text
+                    sb.append(childEl.getTextContent());
+                }
+            }
+        }
+        return sb.toString().trim();
     }
 
     /** Simple field definition from resultMap. */
